@@ -1,50 +1,98 @@
-# Welcome to your Expo app 👋
+# Agatka Turbo Messaging App
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+A real-time messaging app with disappearing messages built with React Native, Expo, and Supabase.
 
-## Get started
+## Features
 
-1. Install dependencies
+- Real-time messaging with keystroke-by-keystroke updates
+- Messages that degrade over time (10% per minute after 5 minutes)
+- User authentication with email/password and Google OAuth
+- Friend management system
+- Dark mode support
 
+## Tech Stack
+
+- Frontend: React Native with TypeScript
+- Framework: Expo with Expo Router
+- UI: React Native Paper
+- Backend: Supabase
+- State Management: React Context
+- Authentication: Supabase Auth
+
+## Prerequisites
+
+- Node.js (v16 or later)
+- npm or yarn
+- Expo CLI
+- Supabase account
+
+## Setup
+
+1. Clone the repository:
+   ```bash
+   git clone <repository-url>
+   cd agatka_turbo
+   ```
+
+2. Install dependencies:
    ```bash
    npm install
    ```
 
-2. Start the app
+3. Create a Supabase project:
+   - Go to [Supabase](https://supabase.com)
+   - Create a new project
+   - Get your project URL and anon key
+   - Run the SQL migrations in `supabase/migrations/initial_schema.sql`
 
+4. Configure environment variables:
+   - Create a `.env` file in the root directory
+   - Add your Supabase configuration:
+     ```
+     EXPO_PUBLIC_SUPABASE_URL=your_supabase_url
+     EXPO_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+     ```
+
+5. Start the development server:
    ```bash
-    npx expo start
+   npm start
    ```
 
-In the output, you'll find options to open the app in a
+## Project Structure
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
+```
+agatka_turbo/
+├── app/                    # Expo Router app directory
+│   ├── (auth)/            # Authentication routes
+│   ├── (app)/             # Main app routes
+│   └── _layout.tsx        # Root layout
+├── components/            # Reusable components
+├── contexts/              # React contexts
+├── hooks/                # Custom hooks
+├── utils/                # Utility functions
+└── supabase/            # Supabase configurations
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+## Development
 
-## Learn more
+1. Authentication Flow:
+   - Login screen (`app/(auth)/login.tsx`)
+   - Registration screen (`app/(auth)/register.tsx`)
+   - Auth context (`contexts/AuthContext.tsx`)
 
-To learn more about developing your project with Expo, look at the following resources:
+2. Main App Flow:
+   - Friends list (`app/(app)/index.tsx`)
+   - Chat screen (`app/(app)/chat/[id].tsx`)
+   - Settings (`app/(app)/settings.tsx`)
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+## Contributing
 
-## Join the community
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
-Join our community of developers creating universal apps.
+## License
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+This project is licensed under the MIT License - see the LICENSE file for details.
