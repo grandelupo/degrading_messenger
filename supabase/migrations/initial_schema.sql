@@ -44,6 +44,16 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
+-- Create function to check if profile exists
+CREATE OR REPLACE FUNCTION check_profile_exists(user_id UUID)
+RETURNS BOOLEAN AS $$
+BEGIN
+    RETURN EXISTS (
+        SELECT 1 FROM profiles WHERE id = user_id
+    );
+END;
+$$ language 'plpgsql';
+
 -- Create triggers for updated_at
 CREATE TRIGGER update_profiles_updated_at
     BEFORE UPDATE ON profiles
@@ -64,6 +74,13 @@ ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Public profiles are viewable by everyone"
     ON profiles FOR SELECT
     USING (true);
+
+CREATE POLICY "Users can create their own profile once"
+    ON profiles FOR INSERT
+    WITH CHECK (
+        auth.uid() = id 
+        AND NOT check_profile_exists(auth.uid())
+    );
 
 CREATE POLICY "Users can update own profile"
     ON profiles FOR UPDATE

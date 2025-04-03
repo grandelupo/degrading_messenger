@@ -6,7 +6,7 @@ type AuthContextType = {
   session: Session | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string, username: string) => Promise<void>;
+  signUp: (email: string, password: string, username: string) => Promise<{ requiresEmailConfirmation: boolean }>;
   signOut: () => Promise<void>;
 };
 
@@ -41,30 +41,55 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signUp = async (email: string, password: string, username: string) => {
-    const { error: signUpError } = await supabase.auth.signUp({
+    // First check if username is already taken
+    const { data: existingUser, error: checkError } = await supabase
+      .from('profiles')
+      .select('username')
+      .eq('username', username)
+      .single();
+
+    if (checkError && checkError.code !== 'PGRST116') {
+      throw checkError;
+    }
+
+    if (existingUser) {
+      throw new Error('Username is already taken');
+    }
+
+    // Sign up the user
+    const { data, error: signUpError } = await supabase.auth.signUp({
       email,
       password,
-      options: {
-        data: {
-          username,
-        },
-      },
     });
 
     if (signUpError) throw signUpError;
+    if (!data.user) throw new Error('User creation failed');
 
-    // Create user profile in the database
-    const { error: profileError } = await supabase
-      .from('profiles')
-      .insert([
-        {
-          user_id: (await supabase.auth.getUser()).data.user?.id,
-          username,
-          last_seen: new Date().toISOString(),
-        },
-      ]);
+    // If email confirmation is not required, sign in and create profile
+    if (data.session) {
+      try {
+        // Create user profile in the database
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .insert([
+            {
+              id: data.user.id,
+              username,
+              last_seen: new Date().toISOString(),
+            },
+          ]);
 
-    if (profileError) throw profileError;
+        if (profileError) throw profileError;
+        
+        return { requiresEmailConfirmation: false };
+      } catch (error) {
+        console.error('Profile creation failed:', error);
+        throw error;
+      }
+    }
+
+    // If we get here, email confirmation is required
+    return { requiresEmailConfirmation: true };
   };
 
   const signOut = async () => {

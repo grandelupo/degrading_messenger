@@ -1,23 +1,39 @@
 import React, { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
-import { TextInput, Button, Text } from 'react-native-paper';
-import { Link } from 'expo-router';
+import { View, StyleSheet } from 'react-native';
+import { TextInput, Button, Text, HelperText } from 'react-native-paper';
+import { Link, useRouter } from 'expo-router';
+import { useAuth } from '../../contexts/AuthContext';
 
 export default function LoginScreen() {
+  const router = useRouter();
+  const { signIn } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   const handleLogin = async () => {
+    if (!email || !password) {
+      setError('Please fill in all fields');
+      return;
+    }
+
     setLoading(true);
+    setError('');
+
     try {
-      // TODO: Implement login logic with Supabase
-      console.log('Login attempt with:', email, password);
-    } catch (error) {
+      await signIn(email, password);
+      router.replace('/');
+    } catch (error: any) {
       console.error('Login error:', error);
+      setError(error.message || 'An error occurred during login');
     } finally {
       setLoading(false);
     }
+  };
+
+  const hasErrors = () => {
+    return !!error;
   };
 
   return (
@@ -29,26 +45,39 @@ export default function LoginScreen() {
       <TextInput
         label="Email"
         value={email}
-        onChangeText={setEmail}
+        onChangeText={text => {
+          setEmail(text);
+          setError('');
+        }}
         autoCapitalize="none"
         autoComplete="email"
         keyboardType="email-address"
         style={styles.input}
+        error={hasErrors()}
       />
       
       <TextInput
         label="Password"
         value={password}
-        onChangeText={setPassword}
+        onChangeText={text => {
+          setPassword(text);
+          setError('');
+        }}
         secureTextEntry
         style={styles.input}
+        error={hasErrors()}
       />
+
+      <HelperText type="error" visible={hasErrors()}>
+        {error}
+      </HelperText>
       
       <Button
         mode="contained"
         onPress={handleLogin}
         loading={loading}
         style={styles.button}
+        disabled={loading}
       >
         Login
       </Button>

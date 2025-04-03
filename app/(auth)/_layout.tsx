@@ -31,6 +31,20 @@ export default function AuthLayout() {
           headerShown: false,
         }}
       />
+      <Stack.Screen
+        name="forgot-password"
+        options={{
+          title: 'Reset Password',
+          headerShown: false,
+        }}
+      />
+      <Stack.Screen
+        name="confirm-email"
+        options={{
+          title: 'Confirm Email',
+          headerShown: false,
+        }}
+      />
     </Stack>
   );
 } 

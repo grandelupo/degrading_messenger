@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, FlatList, StyleSheet } from 'react-native';
 import { List, Text, Avatar, useTheme, ActivityIndicator } from 'react-native-paper';
-import { Link } from 'expo-router';
+import { Link, useRouter } from 'expo-router';
 import { supabase } from '../../utils/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -14,25 +14,32 @@ type Friend = {
 export default function FriendsScreen() {
   const theme = useTheme();
   const { session } = useAuth();
+  const router = useRouter();
   const [friends, setFriends] = useState<Friend[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!session?.user?.id) {
+      router.replace('/login');
+      return;
+    }
     fetchFriends();
     subscribeToFriendUpdates();
-  }, []);
+  }, [session]);
 
   const fetchFriends = async () => {
+    if (!session?.user?.id) return;
+
     try {
       const { data: friendships, error: friendshipsError } = await supabase
         .from('friendships')
         .select('friend_id')
-        .eq('user_id', session?.user.id)
+        .eq('user_id', session.user.id)
         .eq('status', 'accepted');
 
       if (friendshipsError) throw friendshipsError;
 
-      if (friendships) {
+      if (friendships && friendships.length > 0) {
         const friendIds = friendships.map(f => f.friend_id);
         const { data: friendProfiles, error: profilesError } = await supabase
           .from('profiles')
@@ -41,6 +48,8 @@ export default function FriendsScreen() {
 
         if (profilesError) throw profilesError;
         setFriends(friendProfiles || []);
+      } else {
+        setFriends([]);
       }
     } catch (error) {
       console.error('Error fetching friends:', error);
@@ -50,6 +59,8 @@ export default function FriendsScreen() {
   };
 
   const subscribeToFriendUpdates = () => {
+    if (!session?.user?.id) return;
+
     const subscription = supabase
       .channel('friends_presence')
       .on('postgres_changes', {
