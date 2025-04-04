@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, FlatList, StyleSheet } from 'react-native';
-import { List, Text, Avatar, useTheme, ActivityIndicator } from 'react-native-paper';
-import { Link, useRouter } from 'expo-router';
+import { List, Text, Avatar, useTheme, ActivityIndicator, Button, Divider } from 'react-native-paper';
+import { Link, useRouter, useRootNavigationState } from 'expo-router';
 import { supabase } from '../../utils/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -11,40 +11,160 @@ type Friend = {
   last_seen: string;
 };
 
+type FriendRequest = {
+  id: string;
+  username: string;
+  friendship_id: string;
+};
+
 export default function FriendsScreen() {
+  // All hooks must be called before any conditional returns
+  const rootNavigationState = useRootNavigationState();
   const theme = useTheme();
   const { session } = useAuth();
   const router = useRouter();
   const [friends, setFriends] = useState<Friend[]>([]);
+  const [friendRequests, setFriendRequests] = useState<FriendRequest[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // useEffect hook moved to top level with other hooks
   useEffect(() => {
-    if (!session?.user?.id) {
-      router.replace('/login');
-      return;
-    }
     fetchFriends();
-    subscribeToFriendUpdates();
+    fetchFriendRequests();
+    const friendUpdatesCleanup = subscribeToFriendUpdates();
+    const friendRequestsCleanup = subscribeToFriendRequests();
+
+    return () => {
+      friendUpdatesCleanup?.();
+      friendRequestsCleanup?.();
+    };
   }, [session]);
+
+  // Early return for navigation state
+  if (!rootNavigationState?.key) {
+    return null;
+  }
+
+  // Functions
+  const fetchFriendRequests = async () => {
+    if (!session?.user?.id) return;
+
+    try {
+      type RequestResponse = {
+        id: string;
+        user_id: string;
+        profiles: {
+          id: string;
+          username: string;
+        };
+      };
+
+      const { data: requests, error } = await supabase
+        .from('friendships')
+        .select(`
+          id,
+          user_id,
+          profiles:user_id (
+            id,
+            username
+          )
+        `)
+        .eq('friend_id', session.user.id)
+        .eq('status', 'pending')
+        .returns<RequestResponse[]>();
+
+      if (error) throw error;
+
+      const formattedRequests = requests?.map(request => ({
+        id: request.profiles.id,
+        username: request.profiles.username,
+        friendship_id: request.id,
+      })) || [];
+
+      setFriendRequests(formattedRequests);
+    } catch (error) {
+      console.error('Error fetching friend requests:', error);
+    }
+  };
+
+  const handleFriendRequest = async (friendshipId: string, accept: boolean) => {
+    try {
+      if (accept) {
+        const { error } = await supabase
+          .from('friendships')
+          .update({ status: 'accepted' })
+          .eq('id', friendshipId);
+
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('friendships')
+          .delete()
+          .eq('id', friendshipId);
+
+        if (error) throw error;
+      }
+
+      // Remove the request from the local state
+      setFriendRequests(current =>
+        current.filter(request => request.friendship_id !== friendshipId)
+      );
+
+      // If accepted, refresh friends list
+      if (accept) {
+        fetchFriends();
+      }
+    } catch (error) {
+      console.error('Error handling friend request:', error);
+    }
+  };
+
+  const subscribeToFriendRequests = () => {
+    if (!session?.user?.id) return;
+
+    const subscription = supabase
+      .channel('friend_requests')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'friendships',
+        filter: `friend_id=eq.${session.user.id}`,
+      }, () => {
+        fetchFriendRequests();
+      })
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  };
 
   const fetchFriends = async () => {
     if (!session?.user?.id) return;
 
     try {
+      // Get friendships where user is either the sender or receiver
       const { data: friendships, error: friendshipsError } = await supabase
         .from('friendships')
-        .select('friend_id')
-        .eq('user_id', session.user.id)
+        .select('user_id, friend_id')
+        .or(`user_id.eq.${session.user.id},friend_id.eq.${session.user.id}`)
         .eq('status', 'accepted');
 
       if (friendshipsError) throw friendshipsError;
 
       if (friendships && friendships.length > 0) {
-        const friendIds = friendships.map(f => f.friend_id);
+        // Extract friend IDs (if user is sender, take friend_id; if user is receiver, take user_id)
+        const friendIds = friendships.map(f => 
+          f.user_id === session.user.id ? f.friend_id : f.user_id
+        );
+
+        // Remove duplicates if any
+        const uniqueFriendIds = [...new Set(friendIds)];
+
         const { data: friendProfiles, error: profilesError } = await supabase
           .from('profiles')
           .select('id, username, last_seen')
-          .in('id', friendIds);
+          .in('id', uniqueFriendIds);
 
         if (profilesError) throw profilesError;
         setFriends(friendProfiles || []);
@@ -95,6 +215,55 @@ export default function FriendsScreen() {
     return lastSeenDate.toLocaleDateString();
   };
 
+  // Render functions
+  const renderFriendRequest = ({ item }: { item: FriendRequest }) => (
+    <List.Item
+      title={item.username}
+      description="Wants to be your friend"
+      left={props => (
+        <Avatar.Text {...props} size={40} label={item.username[0].toUpperCase()} />
+      )}
+      right={() => (
+        <View style={styles.requestButtons}>
+          <Button
+            mode="contained"
+            onPress={() => handleFriendRequest(item.friendship_id, true)}
+            style={[styles.actionButton, { marginRight: 8 }]}
+            compact
+          >
+            Accept
+          </Button>
+          <Button
+            mode="outlined"
+            onPress={() => handleFriendRequest(item.friendship_id, false)}
+            style={styles.actionButton}
+            compact
+          >
+            Decline
+          </Button>
+        </View>
+      )}
+    />
+  );
+
+  const renderFriend = ({ item }: { item: Friend }) => (
+    <Link href={`/chat/${item.id}`} asChild>
+      <List.Item
+        title={item.username}
+        description={getLastSeenText(item.last_seen)}
+        left={props => (
+          <View style={styles.avatarContainer}>
+            <Avatar.Text {...props} size={40} label={item.username[0].toUpperCase()} />
+            {getLastSeenText(item.last_seen) === 'Online' && (
+              <View style={[styles.onlineIndicator, { backgroundColor: theme.colors.primary }]} />
+            )}
+          </View>
+        )}
+      />
+    </Link>
+  );
+
+  // Early returns
   if (loading) {
     return (
       <View style={styles.centered}>
@@ -103,7 +272,7 @@ export default function FriendsScreen() {
     );
   }
 
-  if (friends.length === 0) {
+  if (friends.length === 0 && friendRequests.length === 0) {
     return (
       <View style={styles.centered}>
         <Text variant="bodyLarge">No friends yet</Text>
@@ -117,32 +286,36 @@ export default function FriendsScreen() {
     );
   }
 
+  // Main render
   return (
-    <FlatList
-      data={friends}
-      keyExtractor={item => item.id}
-      renderItem={({ item }) => (
-        <Link href={`/chat/${item.id}`} asChild>
-          <List.Item
-            title={item.username}
-            description={getLastSeenText(item.last_seen)}
-            left={props => (
-              <View style={styles.avatarContainer}>
-                <Avatar.Text {...props} size={40} label={item.username[0].toUpperCase()} />
-                {getLastSeenText(item.last_seen) === 'Online' && (
-                  <View style={[styles.onlineIndicator, { backgroundColor: theme.colors.primary }]} />
-                )}
-              </View>
-            )}
+    <View style={styles.container}>
+      {friendRequests.length > 0 && (
+        <>
+          <List.Subheader>Friend Requests</List.Subheader>
+          <FlatList
+            data={friendRequests}
+            renderItem={renderFriendRequest}
+            keyExtractor={item => item.friendship_id}
           />
-        </Link>
+          <Divider style={styles.divider} />
+        </>
       )}
-      style={{ backgroundColor: theme.colors.background }}
-    />
+      
+      <List.Subheader>Friends</List.Subheader>
+      <FlatList
+        data={friends}
+        renderItem={renderFriend}
+        keyExtractor={item => item.id}
+        style={{ backgroundColor: theme.colors.background }}
+      />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
   centered: {
     flex: 1,
     justifyContent: 'center',
@@ -162,5 +335,16 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     borderWidth: 2,
     borderColor: 'white',
+  },
+  requestButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingRight: 8,
+  },
+  actionButton: {
+    minWidth: 80,
+  },
+  divider: {
+    marginVertical: 8,
   },
 }); 

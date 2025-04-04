@@ -25,7 +25,8 @@ CREATE TABLE messages (
     receiver_id UUID REFERENCES profiles(id) NOT NULL,
     content TEXT NOT NULL,
     is_deleted BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
+    last_updated TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );
 
 -- Create indexes
@@ -62,6 +63,11 @@ CREATE TRIGGER update_profiles_updated_at
 
 CREATE TRIGGER update_friendships_updated_at
     BEFORE UPDATE ON friendships
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_messages_last_updated
+    BEFORE UPDATE ON messages
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 

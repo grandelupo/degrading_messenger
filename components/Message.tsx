@@ -6,6 +6,7 @@ type MessageProps = {
   message: {
     content: string;
     created_at: string;
+    last_updated: string;
     is_deleted: boolean;
   };
   isOwnMessage: boolean;
@@ -13,48 +14,44 @@ type MessageProps = {
 
 const DEGRADATION_START_MINUTES = 5;
 const DEGRADATION_RATE = 0.1; // 10% per minute
+const DEGRADATION_INTERVAL = 1000; // Update every second
 
 export function Message({ message, isOwnMessage }: MessageProps) {
   const theme = useTheme();
-  const [degradedContent, setDegradedContent] = useState(message.content);
-  const [opacity, setOpacity] = useState(1);
+  const [visibleContent, setVisibleContent] = useState(message.content);
 
   useEffect(() => {
     const updateDegradation = () => {
-      const createdAt = new Date(message.created_at);
+      const lastUpdated = new Date(message.last_updated || message.created_at);
       const now = new Date();
-      const diffMinutes = (now.getTime() - createdAt.getTime()) / 1000 / 60;
+      const diffMinutes = (now.getTime() - lastUpdated.getTime()) / 1000 / 60;
 
       if (diffMinutes < DEGRADATION_START_MINUTES) {
-        setDegradedContent(message.content);
-        setOpacity(1);
+        setVisibleContent(message.content);
         return;
       }
 
       const degradationMinutes = diffMinutes - DEGRADATION_START_MINUTES;
-      const degradationPercentage = Math.min(degradationMinutes * DEGRADATION_RATE, 1);
-      const remainingPercentage = 1 - degradationPercentage;
+      const totalChars = message.content.length;
+      const charsToRemove = Math.floor(degradationMinutes * DEGRADATION_RATE * totalChars);
 
-      if (remainingPercentage <= 0) {
-        setDegradedContent('');
-        setOpacity(0);
+      if (charsToRemove >= totalChars) {
+        setVisibleContent('');
         return;
       }
 
-      // Calculate how many characters to keep
-      const charsToKeep = Math.ceil(message.content.length * remainingPercentage);
-      const newContent = message.content.slice(0, charsToKeep);
-      setDegradedContent(newContent);
-      setOpacity(remainingPercentage);
+      // Remove characters from the beginning (oldest first)
+      const remainingContent = message.content.slice(charsToRemove);
+      setVisibleContent(remainingContent);
     };
 
     updateDegradation();
-    const interval = setInterval(updateDegradation, 1000);
+    const interval = setInterval(updateDegradation, DEGRADATION_INTERVAL);
 
     return () => clearInterval(interval);
-  }, [message.content, message.created_at]);
+  }, [message.content, message.created_at, message.last_updated]);
 
-  if (opacity === 0 || message.is_deleted) {
+  if (!visibleContent || message.is_deleted) {
     return null;
   }
 
@@ -63,7 +60,6 @@ export function Message({ message, isOwnMessage }: MessageProps) {
       style={[
         styles.container,
         isOwnMessage ? styles.ownMessage : styles.otherMessage,
-        { opacity },
       ]}
     >
       <View
@@ -82,7 +78,7 @@ export function Message({ message, isOwnMessage }: MessageProps) {
               : { color: theme.colors.onSecondaryContainer },
           ]}
         >
-          {degradedContent}
+          {visibleContent}
         </Text>
       </View>
     </View>

@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { View, StyleSheet } from 'react-native';
-import { TextInput, Button, Text, HelperText } from 'react-native-paper';
+import { View, StyleSheet, Image } from 'react-native';
+import { TextInput, Button, Text, HelperText, useTheme } from 'react-native-paper';
 import { Link, useRouter } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
 
 export default function RegisterScreen() {
   const router = useRouter();
+  const theme = useTheme();
   const { signUp } = useAuth();
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
@@ -75,7 +76,13 @@ export default function RegisterScreen() {
 
   if (showConfirmation) {
     return (
-      <View style={styles.container}>
+      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+        <View style={styles.logoContainer}>
+          <Image
+            source={require('../../assets/messenger-icon.png')}
+            style={styles.logo}
+          />
+        </View>
         <Text variant="headlineMedium" style={styles.title}>
           Check Your Email
         </Text>
@@ -83,7 +90,11 @@ export default function RegisterScreen() {
           We've sent you an email with a confirmation link. Please check your email and click the link to complete your registration.
         </Text>
         <Link href="/login" asChild>
-          <Button mode="contained" style={styles.button}>
+          <Button 
+            mode="contained" 
+            style={[styles.button, { backgroundColor: theme.colors.primary }]}
+            contentStyle={styles.buttonContent}
+          >
             Return to Login
           </Button>
         </Link>
@@ -92,12 +103,16 @@ export default function RegisterScreen() {
   }
 
   return (
-    <View style={styles.container}>
-      <Text variant="headlineMedium" style={styles.title}>
-        Create Account
-      </Text>
+    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <View style={styles.logoContainer}>
+        <Image
+          source={require('../../assets/messenger-icon.png')}
+          style={styles.logo}
+        />
+      </View>
       
       <TextInput
+        mode="outlined"
         label="Email"
         value={email}
         onChangeText={text => {
@@ -109,9 +124,11 @@ export default function RegisterScreen() {
         keyboardType="email-address"
         style={styles.input}
         error={!!error}
+        outlineStyle={styles.inputOutline}
       />
 
       <TextInput
+        mode="outlined"
         label="Username"
         value={username}
         onChangeText={text => {
@@ -121,9 +138,11 @@ export default function RegisterScreen() {
         autoCapitalize="none"
         style={styles.input}
         error={!!error}
+        outlineStyle={styles.inputOutline}
       />
       
       <TextInput
+        mode="outlined"
         label="Password"
         value={password}
         onChangeText={text => {
@@ -133,9 +152,11 @@ export default function RegisterScreen() {
         secureTextEntry
         style={styles.input}
         error={!!error}
+        outlineStyle={styles.inputOutline}
       />
 
       <TextInput
+        mode="outlined"
         label="Confirm Password"
         value={confirmPassword}
         onChangeText={text => {
@@ -145,6 +166,7 @@ export default function RegisterScreen() {
         secureTextEntry
         style={styles.input}
         error={!!error}
+        outlineStyle={styles.inputOutline}
       />
 
       <HelperText type="error" visible={!!error}>
@@ -155,15 +177,26 @@ export default function RegisterScreen() {
         mode="contained"
         onPress={handleRegister}
         loading={loading}
-        style={styles.button}
+        style={[styles.button, { backgroundColor: theme.colors.primary }]}
+        contentStyle={styles.buttonContent}
         disabled={loading}
       >
-        Register
+        Create Account
       </Button>
 
+      <View style={styles.divider}>
+        <View style={[styles.dividerLine, { backgroundColor: theme.colors.outline }]} />
+        <Text style={[styles.dividerText, { color: theme.colors.outline }]}>OR</Text>
+        <View style={[styles.dividerLine, { backgroundColor: theme.colors.outline }]} />
+      </View>
+
       <Link href="/login" asChild>
-        <Button mode="text" style={styles.link}>
-          Already have an account? Sign in
+        <Button 
+          mode="outlined" 
+          style={styles.loginButton}
+          labelStyle={{ color: theme.colors.primary }}
+        >
+          Log In to Existing Account
         </Button>
       </Link>
     </View>
@@ -176,9 +209,18 @@ const styles = StyleSheet.create({
     padding: 20,
     justifyContent: 'center',
   },
+  logoContainer: {
+    alignItems: 'center',
+    marginBottom: 48,
+  },
+  logo: {
+    width: 60,
+    height: 60,
+    resizeMode: 'contain',
+  },
   title: {
     textAlign: 'center',
-    marginBottom: 30,
+    marginBottom: 20,
   },
   description: {
     textAlign: 'center',
@@ -187,12 +229,35 @@ const styles = StyleSheet.create({
   },
   input: {
     marginBottom: 16,
+    backgroundColor: 'transparent',
+  },
+  inputOutline: {
+    borderRadius: 12,
   },
   button: {
     marginTop: 8,
     marginBottom: 16,
+    borderRadius: 24,
+    height: 48,
   },
-  link: {
-    marginVertical: 4,
+  buttonContent: {
+    height: 48,
+  },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 24,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+  },
+  dividerText: {
+    marginHorizontal: 16,
+    fontSize: 12,
+  },
+  loginButton: {
+    borderRadius: 24,
+    height: 48,
   },
 }); 
