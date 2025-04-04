@@ -42,7 +42,7 @@ export default function SettingsScreen() {
         </Link>
       </List.Section>
 
-      <Divider />
+      {/* <Divider />
 
       <List.Section>
         <List.Subheader>Legal</List.Subheader>
@@ -58,7 +58,7 @@ export default function SettingsScreen() {
             left={props => <List.Icon {...props} icon="file-document" />}
           />
         </Link>
-      </List.Section>
+      </List.Section> */}
 
       <Divider />
 
