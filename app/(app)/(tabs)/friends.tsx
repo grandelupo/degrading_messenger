@@ -12,11 +12,13 @@ type Friend = {
   id: string;
   username: string;
   last_seen: string | null;
+  avatar_url: string | null;
 };
 
 type FriendRequest = {
   id: string;
   username: string;
+  avatar_url: string | null;
   friendship_id: string;
 };
 
@@ -25,6 +27,7 @@ interface FriendshipWithUser {
   user: {
     id: string;
     username: string;
+    avatar_url: string | null;
   };
 }
 
@@ -46,7 +49,8 @@ export default function FriendsScreen() {
           id,
           user:user_id (
             id,
-            username
+            username,
+            avatar_url
           )
         `)
         .eq('friend_id', session.user.id)
@@ -59,6 +63,7 @@ export default function FriendsScreen() {
         const formattedRequests = requests.map(request => ({
           id: request.user.id,
           username: request.user.username,
+          avatar_url: request.user.avatar_url,
           friendship_id: request.id,
         }));
         setFriendRequests(formattedRequests);
@@ -144,7 +149,7 @@ export default function FriendsScreen() {
 
         const { data: friendProfiles, error: profilesError } = await supabase
           .from('profiles')
-          .select('id, username, last_seen')
+          .select('id, username, last_seen, avatar_url')
           .in('id', uniqueFriendIds);
 
         if (profilesError) throw profilesError;
@@ -227,6 +232,7 @@ export default function FriendsScreen() {
                   <FriendRequest
                     key={request.id}
                     username={request.username}
+                    avatar_url={request.avatar_url}
                     onAccept={() => handleFriendRequest(request.friendship_id, true)}
                     onReject={() => handleFriendRequest(request.friendship_id, false)}
                   />
@@ -252,6 +258,7 @@ export default function FriendsScreen() {
             <FriendItem
               username={item.username}
               lastSeen={item.last_seen}
+              avatar_url={item.avatar_url}
             />
           </Link>
         )}

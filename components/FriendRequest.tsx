@@ -1,21 +1,33 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
-import { Text, Button, useTheme } from 'react-native-paper';
+import { Text, Button, useTheme, Avatar } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 type FriendRequestProps = {
   username: string;
+  avatar_url?: string | null;
   onAccept: () => void;
   onReject: () => void;
 };
 
-export function FriendRequest({ username, onAccept, onReject }: FriendRequestProps) {
+export function FriendRequest({ username, avatar_url, onAccept, onReject }: FriendRequestProps) {
   const theme = useTheme();
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.surfaceVariant }]}>
       <View style={styles.userInfo}>
-        <MaterialCommunityIcons name="account-circle" size={40} color={theme.colors.primary} />
+        {avatar_url ? (
+          <Avatar.Image 
+            size={40} 
+            source={{ uri: avatar_url }}
+          />
+        ) : (
+          <MaterialCommunityIcons 
+            name="account-circle" 
+            size={40} 
+            color={theme.colors.primary} 
+          />
+        )}
         <Text variant="titleMedium" style={styles.username}>
           {username}
         </Text>

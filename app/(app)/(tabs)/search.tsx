@@ -9,6 +9,7 @@ import { SearchResult } from '@/components/SearchResult';
 type UserResult = {
   id: string;
   username: string;
+  avatar_url: string | null;
   friendshipStatus: 'none' | 'pending' | 'accepted';
 };
 
@@ -29,7 +30,7 @@ export default function SearchScreen() {
       // First, get all users matching the search query
       const { data: users, error: usersError } = await supabase
         .from('profiles')
-        .select('id, username')
+        .select('id, username, avatar_url')
         .neq('id', session.user.id)
         .ilike('username', `%${query}%`)
         .limit(20);
@@ -59,6 +60,7 @@ export default function SearchScreen() {
         return {
           id: user.id,
           username: user.username,
+          avatar_url: user.avatar_url,
           friendshipStatus: friendship ? friendship.status : 'none',
         };
       });
@@ -115,6 +117,7 @@ export default function SearchScreen() {
         renderItem={({ item }) => (
           <SearchResult
             username={item.username}
+            avatar_url={item.avatar_url}
             status={item.friendshipStatus}
             onAddFriend={() => handleFriendRequest(item.id)}
           />

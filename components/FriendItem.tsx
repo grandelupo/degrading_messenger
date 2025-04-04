@@ -1,16 +1,17 @@
 import React, { forwardRef } from 'react';
 import { View, StyleSheet, Pressable } from 'react-native';
-import { Text, useTheme } from 'react-native-paper';
+import { Text, useTheme, Avatar } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 export interface FriendItemProps {
   username: string;
   lastSeen?: string | null;
+  avatar_url?: string | null;
   onPress?: () => void;
 }
 
 export const FriendItem = forwardRef<View, FriendItemProps>(
-  ({ username, lastSeen, onPress }, ref) => {
+  ({ username, lastSeen, avatar_url, onPress }, ref) => {
     const theme = useTheme();
 
     const getLastSeenText = () => {
@@ -42,7 +43,18 @@ export const FriendItem = forwardRef<View, FriendItemProps>(
         ]}
       >
         <View style={styles.userInfo}>
-          <MaterialCommunityIcons name="account-circle" size={40} color={theme.colors.primary} />
+          {avatar_url ? (
+            <Avatar.Image 
+              size={40} 
+              source={{ uri: avatar_url }}
+            />
+          ) : (
+            <MaterialCommunityIcons 
+              name="account-circle" 
+              size={40} 
+              color={theme.colors.primary} 
+            />
+          )}
           <View style={styles.textContainer}>
             <Text variant="titleMedium">{username}</Text>
             <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceDisabled }}>

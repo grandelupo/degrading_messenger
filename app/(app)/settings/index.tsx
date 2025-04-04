@@ -22,6 +22,12 @@ export default function SettingsScreen() {
     <ScrollView style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <List.Section>
         <List.Subheader>Account Settings</List.Subheader>
+        <Link href="/settings/profile" asChild>
+          <List.Item
+            title="Edit Profile"
+            left={props => <List.Icon {...props} icon="account-edit" />}
+          />
+        </Link>
         <Link href="/settings/change-password" asChild>
           <List.Item
             title="Change Password"

@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, StyleSheet, KeyboardAvoidingView, Platform, Keyboard, Animated } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
-import { TextInput, useTheme, ActivityIndicator, Text } from 'react-native-paper';
+import { View, StyleSheet, KeyboardAvoidingView, Platform, Keyboard, Animated, Image } from 'react-native';
+import { useLocalSearchParams, useNavigation } from 'expo-router';
+import { TextInput, useTheme, ActivityIndicator, Text, Avatar } from 'react-native-paper';
 import { FlashList } from '@shopify/flash-list';
 import { supabase } from '../../../utils/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
 import { Message } from '../../../components/Message';
 import { EmojiButton } from '@/components/EmojiButton';
 import { EmojiType, getEmoji } from '@/utils/emojiConfig';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 type MessageType = 'text' | 'emoji';
 
@@ -20,6 +21,12 @@ interface Message {
   created_at: string;
   updated_at: string;
   is_deleted?: boolean;
+}
+
+interface UserProfile {
+  id: string;
+  username: string;
+  avatar_url?: string;
 }
 
 const MessageBubble = ({ 
@@ -110,14 +117,62 @@ const MessageBubble = ({
 export default function ChatScreen() {
   const { id: receiverId } = useLocalSearchParams();
   const theme = useTheme();
+  const navigation = useNavigation();
   const { session } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
   const [inputText, setInputText] = useState('');
   const [lastSentWords, setLastSentWords] = useState('');
   const [lastMessageTimestamp, setLastMessageTimestamp] = useState<Date | null>(null);
+  const [receiverProfile, setReceiverProfile] = useState<UserProfile | null>(null);
   const inputRef = useRef<any>(null);
   const [messageCount, setMessageCount] = useState(0);
+
+  // Fetch receiver's profile
+  useEffect(() => {
+    const fetchReceiverProfile = async () => {
+      if (!receiverId) return;
+
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('id, username, avatar_url')
+          .eq('id', receiverId)
+          .single();
+
+        if (error) throw error;
+        if (data) {
+          setReceiverProfile(data);
+          // Set the navigation header
+          navigation.setOptions({
+            title: data.username,
+            headerTitle: () => (
+              <View style={styles.headerContainer}>
+                <Avatar.Image 
+                  size={36} 
+                  source={{ uri: data.avatar_url || 'default-avatar-url.png' }}
+                  style={styles.headerAvatar}
+                />
+                <Text 
+                  variant="titleMedium" 
+                  style={[
+                    styles.headerUsername,
+                    { color: theme.colors.onBackground }
+                  ]}
+                >
+                  {data.username}
+                </Text>
+              </View>
+            ),
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching receiver profile:', error);
+      }
+    };
+
+    fetchReceiverProfile();
+  }, [receiverId, navigation, theme.colors]);
 
   // Keep keyboard always open
   useEffect(() => {
@@ -540,5 +595,16 @@ const styles = StyleSheet.create({
     marginLeft: 4,
     marginTop: -16,
     alignSelf: 'flex-start',
+  },
+  headerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+  },
+  headerAvatar: {
+    marginRight: 12,
+  },
+  headerUsername: {
+    fontWeight: '600',
   },
 }); 

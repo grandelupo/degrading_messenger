@@ -1,16 +1,18 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
-import { Text, Button, useTheme } from 'react-native-paper';
+import { Text, Button, useTheme, Avatar } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 type SearchResultProps = {
   username: string;
+  avatar_url?: string | null;
   onAddFriend: () => void;
   status: 'none' | 'pending' | 'accepted';
 };
 
 export function SearchResult({ 
   username, 
+  avatar_url,
   onAddFriend, 
   status
 }: SearchResultProps) {
@@ -47,7 +49,18 @@ export function SearchResult({
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.surfaceVariant }]}>
       <View style={styles.userInfo}>
-        <MaterialCommunityIcons name="account-circle" size={40} color={theme.colors.primary} />
+        {avatar_url ? (
+          <Avatar.Image 
+            size={40} 
+            source={{ uri: avatar_url }}
+          />
+        ) : (
+          <MaterialCommunityIcons 
+            name="account-circle" 
+            size={40} 
+            color={theme.colors.primary} 
+          />
+        )}
         <Text variant="titleMedium" style={styles.username}>
           {username}
         </Text>
