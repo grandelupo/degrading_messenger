@@ -1,31 +1,76 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, StyleSheet, KeyboardAvoidingView, Platform, Keyboard } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
-import { TextInput, useTheme, ActivityIndicator } from 'react-native-paper';
+import { TextInput, useTheme, ActivityIndicator, Text } from 'react-native-paper';
 import { FlashList } from '@shopify/flash-list';
 import { supabase } from '../../../utils/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
 import { Message } from '../../../components/Message';
+import { EmojiButton } from '@/components/EmojiButton';
+import { EmojiType, getEmoji } from '@/utils/emojiConfig';
 
-type ChatMessage = {
+type MessageType = 'text' | 'emoji';
+
+interface Message {
   id: string;
   content: string;
+  type: MessageType;
   sender_id: string;
   receiver_id: string;
   created_at: string;
-  is_deleted: boolean;
   updated_at: string;
+  is_deleted?: boolean;
+}
+
+const MessageBubble = ({ message, isOwnMessage, messageCount }: { 
+  message: Message; 
+  isOwnMessage: boolean;
+  messageCount: number;
+}) => {
+  const theme = useTheme();
+  const isEmoji = message.type === 'emoji';
+
+  const bubbleStyle = [
+    styles.message,
+    isOwnMessage ? styles.ownMessage : styles.otherMessage,
+    { 
+      backgroundColor: isOwnMessage 
+        ? theme.colors.primary 
+        : theme.colors.surfaceVariant,
+      padding: isEmoji ? 8 : 12,
+      minHeight: isEmoji ? 50 : undefined,
+    }
+  ];
+
+  const textStyle = [
+    styles.messageText,
+    { 
+      color: isOwnMessage 
+        ? theme.colors.onPrimary 
+        : theme.colors.onSurface,
+      fontSize: isEmoji ? 32 : 16,
+    }
+  ];
+
+  return (
+    <View style={bubbleStyle}>
+      <Text style={textStyle}>
+        {isEmoji ? getEmoji(message.content as EmojiType, messageCount) : message.content}
+      </Text>
+    </View>
+  );
 };
 
 export default function ChatScreen() {
   const { id: receiverId } = useLocalSearchParams();
   const theme = useTheme();
   const { session } = useAuth();
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentWord, setCurrentWord] = useState('');
   const [accumulatedWords, setAccumulatedWords] = useState('');
   const inputRef = useRef<any>(null);
+  const [messageCount, setMessageCount] = useState(0);
 
   // Keep keyboard always open
   useEffect(() => {
@@ -72,9 +117,10 @@ export default function ChatScreen() {
         }
 
         return msg;
-      }).filter((msg): msg is ChatMessage => msg !== null);
+      }).filter((msg): msg is Message => msg !== null);
 
       setMessages(processedMessages);
+      setMessageCount(processedMessages.length);
     } catch (error) {
       console.error('Error fetching messages:', error);
     } finally {
@@ -137,14 +183,15 @@ export default function ChatScreen() {
     }
 
     if (payload.eventType === 'INSERT') {
-      const newMessage: ChatMessage = {
+      const newMessage: Message = {
         id: payload.new.id,
         content: payload.new.content,
+        type: payload.new.type,
         sender_id: payload.new.sender_id,
         receiver_id: payload.new.receiver_id,
         created_at: payload.new.created_at,
-        is_deleted: payload.new.is_deleted || false,
-        updated_at: payload.new.updated_at || payload.new.created_at,
+        updated_at: payload.new.updated_at,
+        is_deleted: payload.new.is_deleted,
       };
 
       setMessages((current) => {
@@ -155,6 +202,7 @@ export default function ChatScreen() {
         // Add new message at the beginning (since list is inverted)
         return [newMessage, ...current];
       });
+      setMessageCount(count => count + 1);
     } else if (payload.eventType === 'UPDATE') {
       setMessages((current) =>
         current.map((msg) =>
@@ -162,11 +210,12 @@ export default function ChatScreen() {
             ? {
                 id: payload.new.id,
                 content: payload.new.content,
+                type: payload.new.type,
                 sender_id: payload.new.sender_id,
                 receiver_id: payload.new.receiver_id,
                 created_at: payload.new.created_at,
-                is_deleted: payload.new.is_deleted || false,
-                updated_at: payload.new.updated_at || payload.new.created_at,
+                updated_at: payload.new.updated_at,
+                is_deleted: payload.new.is_deleted,
               }
             : msg
         )
@@ -187,7 +236,7 @@ export default function ChatScreen() {
           (new Date().getTime() - new Date(latestMessage.updated_at).getTime()) < 15000; // 15 seconds
 
         try {
-          if (isLatestFromSelf && !latestMessage.is_deleted && isRecentMessage) {
+          if (isLatestFromSelf && latestMessage.type === 'text' && !latestMessage.is_deleted && isRecentMessage) {
             // Update existing message
             const updatedContent = `${latestMessage.content} ${wordsToSend}`;
             const { data, error } = await supabase
@@ -219,6 +268,7 @@ export default function ChatScreen() {
                   sender_id: session.user.id,
                   receiver_id: receiverId,
                   content: wordsToSend,
+                  type: 'text',
                   updated_at: new Date().toISOString()
                 },
               ])
@@ -257,6 +307,44 @@ export default function ChatScreen() {
     }
   };
 
+  const handleEmojiPress = async (type: EmojiType) => {
+    if (!session?.user?.id || !receiverId) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('messages')
+        .insert([
+          {
+            sender_id: session.user.id,
+            receiver_id: receiverId,
+            content: type,
+            type: 'emoji' as MessageType,
+            updated_at: new Date().toISOString(),
+          },
+        ])
+        .select();
+
+      if (error) throw error;
+      if (data?.[0]) {
+        setMessages(current => [data[0], ...current]);
+        setMessageCount(count => count + 1);
+      }
+    } catch (error) {
+      console.error('Error sending emoji:', error);
+    }
+  };
+
+  const renderMessage = ({ item }: { item: Message }) => {
+    const isOwnMessage = item.sender_id === session?.user?.id;
+    return (
+      <MessageBubble 
+        message={item} 
+        isOwnMessage={isOwnMessage} 
+        messageCount={messageCount}
+      />
+    );
+  };
+
   if (loading) {
     return (
       <View style={styles.centered}>
@@ -267,19 +355,27 @@ export default function ChatScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={styles.container}
+      style={[styles.container, { backgroundColor: theme.colors.background }]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
+      <View style={styles.emojiContainer}>
+        {(['heart', 'smile', 'angry', 'wink'] as EmojiType[]).map((type) => (
+          <EmojiButton
+            key={type}
+            type={type}
+            messageCount={messageCount}
+            onPress={() => handleEmojiPress(type)}
+            size={32}
+          />
+        ))}
+      </View>
+      
       <FlashList
         data={messages}
-        estimatedItemSize={70}
-        renderItem={({ item }) => (
-          <Message
-            message={item}
-            isOwnMessage={item.sender_id === session?.user?.id}
-          />
-        )}
+        renderItem={renderMessage}
+        estimatedItemSize={50}
+        contentContainerStyle={styles.messageList}
         inverted
       />
 
@@ -315,5 +411,32 @@ const styles = StyleSheet.create({
   },
   input: {
     maxHeight: 100,
+  },
+  emojiContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    padding: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.1)',
+  },
+  messageList: {
+    padding: 16,
+  },
+  message: {
+    maxWidth: '80%',
+    padding: 12,
+    borderRadius: 16,
+    marginBottom: 8,
+  },
+  ownMessage: {
+    alignSelf: 'flex-end',
+    borderBottomRightRadius: 4,
+  },
+  otherMessage: {
+    alignSelf: 'flex-start',
+    borderBottomLeftRadius: 4,
+  },
+  messageText: {
+    textAlign: 'center',
   },
 }); 
