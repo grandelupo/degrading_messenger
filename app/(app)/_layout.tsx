@@ -1,50 +1,60 @@
-import { Tabs } from 'expo-router';
+import { Stack } from 'expo-router';
 import { useTheme } from 'react-native-paper';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 export default function AppLayout() {
   const theme = useTheme();
 
   return (
-    <Tabs
+    <Stack
       screenOptions={{
         headerStyle: {
           backgroundColor: theme.colors.background,
         },
         headerTintColor: theme.colors.primary,
-        tabBarStyle: {
-          backgroundColor: theme.colors.background,
-        },
-        tabBarActiveTintColor: theme.colors.primary,
+        headerShadowVisible: false,
       }}
     >
-      <Tabs.Screen
-        name="index"
+      <Stack.Screen
+        name="(tabs)"
         options={{
-          title: 'Friends',
-          tabBarIcon: ({ color, size }) => (
-            <MaterialCommunityIcons name="account-group" size={size} color={color} />
-          ),
+          headerShown: false,
         }}
       />
-      <Tabs.Screen
-        name="search"
+      <Stack.Screen
+        name="chat/[id]"
         options={{
-          title: 'Search',
-          tabBarIcon: ({ color, size }) => (
-            <MaterialCommunityIcons name="account-search" size={size} color={color} />
-          ),
+          headerTitle: 'Chat',
+          headerBackTitle: 'Back',
         }}
       />
-      <Tabs.Screen
-        name="settings"
+      <Stack.Screen
+        name="settings/change-password"
         options={{
-          title: 'Settings',
-          tabBarIcon: ({ color, size }) => (
-            <MaterialCommunityIcons name="cog" size={size} color={color} />
-          ),
+          headerTitle: 'Change Password',
+          presentation: 'modal',
         }}
       />
-    </Tabs>
+      <Stack.Screen
+        name="settings/delete-account"
+        options={{
+          headerTitle: 'Delete Account',
+          presentation: 'modal',
+        }}
+      />
+      <Stack.Screen
+        name="settings/privacy-policy"
+        options={{
+          headerTitle: 'Privacy Policy',
+          presentation: 'modal',
+        }}
+      />
+      <Stack.Screen
+        name="settings/terms"
+        options={{
+          headerTitle: 'Terms of Service',
+          presentation: 'modal',
+        }}
+      />
+    </Stack>
   );
 } 

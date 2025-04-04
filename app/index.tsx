@@ -16,7 +16,7 @@ export default function InitialScreen() {
   }
 
   if (session) {
-    return <Redirect href="/(app)" />;
+    return <Redirect href="/(app)/(tabs)/friends" />;
   }
 
   return <Redirect href="/(auth)/login" />;
