@@ -14,7 +14,7 @@ type ChatMessage = {
   receiver_id: string;
   created_at: string;
   is_deleted: boolean;
-  last_updated: string;
+  updated_at: string;
 };
 
 export default function ChatScreen() {
@@ -56,14 +56,14 @@ export default function ChatScreen() {
         .from('messages')
         .select('*')
         .or(`and(sender_id.eq.${session.user.id},receiver_id.eq.${receiverId}),and(sender_id.eq.${receiverId},receiver_id.eq.${session.user.id})`)
-        .gte('last_updated', cutoffTime.toISOString())
+        .gte('updated_at', cutoffTime.toISOString())
         .order('created_at', { ascending: false });
 
       if (error) throw error;
 
       // Calculate degradation for each message before setting state
       const processedMessages = (rawMessages || []).map(msg => {
-        const timeSinceLastUpdate = now.getTime() - new Date(msg.last_updated).getTime();
+        const timeSinceLastUpdate = now.getTime() - new Date(msg.updated_at).getTime();
         const hoursElapsed = timeSinceLastUpdate / (1000 * 60 * 60);
         
         // If message is older than 24 hours, don't include it
@@ -128,7 +128,7 @@ export default function ChatScreen() {
 
   const handleRealtimeUpdate = (payload: any) => {
     const now = new Date();
-    const timeSinceLastUpdate = now.getTime() - new Date(payload.new.last_updated).getTime();
+    const timeSinceLastUpdate = now.getTime() - new Date(payload.new.updated_at).getTime();
     const hoursElapsed = timeSinceLastUpdate / (1000 * 60 * 60);
 
     // Don't process messages that have already degraded
@@ -144,7 +144,7 @@ export default function ChatScreen() {
         receiver_id: payload.new.receiver_id,
         created_at: payload.new.created_at,
         is_deleted: payload.new.is_deleted || false,
-        last_updated: payload.new.last_updated || payload.new.created_at,
+        updated_at: payload.new.updated_at || payload.new.created_at,
       };
 
       setMessages((current) => {
@@ -166,7 +166,7 @@ export default function ChatScreen() {
                 receiver_id: payload.new.receiver_id,
                 created_at: payload.new.created_at,
                 is_deleted: payload.new.is_deleted || false,
-                last_updated: payload.new.last_updated || payload.new.created_at,
+                updated_at: payload.new.updated_at || payload.new.created_at,
               }
             : msg
         )
@@ -175,7 +175,7 @@ export default function ChatScreen() {
   };
 
   const handleInputChange = async (text: string) => {
-    if (!session?.user?.id) return;
+    if (!session?.user?.id || !receiverId) return;
 
     if (text.endsWith(' ')) {
       // Space was added, prepare to send accumulated words
@@ -184,7 +184,7 @@ export default function ChatScreen() {
         const latestMessage = messages[0];
         const isLatestFromSelf = latestMessage?.sender_id === session.user.id;
         const isRecentMessage = latestMessage && 
-          (new Date().getTime() - new Date(latestMessage.last_updated).getTime()) < 15000; // 15 seconds
+          (new Date().getTime() - new Date(latestMessage.updated_at).getTime()) < 15000; // 15 seconds
 
         try {
           if (isLatestFromSelf && !latestMessage.is_deleted && isRecentMessage) {
@@ -194,7 +194,7 @@ export default function ChatScreen() {
               .from('messages')
               .update({ 
                 content: updatedContent,
-                last_updated: new Date().toISOString()
+                updated_at: new Date().toISOString()
               })
               .eq('id', latestMessage.id)
               .select()
@@ -219,7 +219,7 @@ export default function ChatScreen() {
                   sender_id: session.user.id,
                   receiver_id: receiverId,
                   content: wordsToSend,
-                  last_updated: new Date().toISOString()
+                  updated_at: new Date().toISOString()
                 },
               ])
               .select()
