@@ -3,12 +3,14 @@ import { View, StyleSheet, KeyboardAvoidingView, Platform, Keyboard, Animated, I
 import { useLocalSearchParams, useNavigation } from 'expo-router';
 import { TextInput, useTheme, ActivityIndicator, Text, Avatar } from 'react-native-paper';
 import { FlashList } from '@shopify/flash-list';
+import * as Notifications from 'expo-notifications';
 import { supabase } from '../../../utils/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
 import { Message } from '../../../components/Message';
 import { EmojiButton } from '@/components/EmojiButton';
 import { EmojiType, getEmoji } from '@/utils/emojiConfig';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { registerForPushNotificationsAsync, savePushToken, sendPushNotification } from '@/utils/notifications';
 
 type MessageType = 'text' | 'emoji';
 
@@ -166,6 +168,7 @@ export default function ChatScreen() {
   const inputRef = useRef<any>(null);
   const [totalMessageCount, setTotalMessageCount] = useState(0);
   const [initialDataLoaded, setInitialDataLoaded] = useState(false);
+  const [receiverPushToken, setReceiverPushToken] = useState<string | null>(null);
 
   // Fetch receiver's profile
   useEffect(() => {
@@ -334,7 +337,45 @@ export default function ChatScreen() {
     };
   }, [session?.user?.id, receiverId]);
 
-  const handleRealtimeUpdate = (payload: any) => {
+  // Register for push notifications and save token
+  useEffect(() => {
+    const setupPushNotifications = async () => {
+      if (!session?.user?.id) return;
+
+      const token = await registerForPushNotificationsAsync();
+      if (token) {
+        await savePushToken(session.user.id, token);
+      }
+    };
+
+    setupPushNotifications();
+  }, [session?.user?.id]);
+
+  // Fetch receiver's push token
+  useEffect(() => {
+    const fetchReceiverPushToken = async () => {
+      if (!receiverId) return;
+
+      try {
+        const { data, error } = await supabase
+          .from('push_tokens')
+          .select('token')
+          .eq('user_id', receiverId)
+          .single();
+
+        if (error) throw error;
+        if (data) {
+          setReceiverPushToken(data.token);
+        }
+      } catch (error) {
+        console.error('Error fetching receiver push token:', error);
+      }
+    };
+
+    fetchReceiverPushToken();
+  }, [receiverId]);
+
+  const handleRealtimeUpdate = async (payload: any) => {
     if (payload.eventType === 'INSERT') {
       const newMessage: Message = {
         id: payload.new.id,
@@ -356,6 +397,21 @@ export default function ChatScreen() {
           }
           return [degradedMessage, ...current];
         });
+
+        // Send push notification for new message if it's from the other user
+        if (newMessage.sender_id === receiverId && receiverProfile && receiverPushToken) {
+          try {
+            await sendPushNotification(
+              receiverPushToken,
+              `New message from ${receiverProfile.username}`,
+              newMessage.type === 'emoji' 
+                ? '📱 Sent an emoji'
+                : newMessage.content.slice(0, 50) + (newMessage.content.length > 50 ? '...' : '')
+            );
+          } catch (error) {
+            console.error('Error sending push notification:', error);
+          }
+        }
       }
       // Increment total message count for new messages
       setTotalMessageCount(count => count + 1);

@@ -55,6 +55,19 @@ export default function AppLayout() {
           presentation: 'modal',
         }}
       />
+      <Stack.Screen
+        name="settings/profile"
+        options={{
+          headerTitle: 'Profile',
+          presentation: 'modal',
+        }}
+      />
+      <Stack.Screen
+        name="settings/index"
+        options={{
+          headerTitle: 'Settings',
+        }}
+      />
     </Stack>
   );
 } 
