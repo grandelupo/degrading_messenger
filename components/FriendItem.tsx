@@ -74,6 +74,7 @@ export const FriendItem = forwardRef<View, FriendItemProps>(
 
 const styles = StyleSheet.create({
   container: {
+    margin: 16,
     padding: 16,
     borderRadius: 12,
     marginBottom: 8,

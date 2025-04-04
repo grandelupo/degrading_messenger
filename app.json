@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "agatka_turbo",
-    "slug": "agatka_turbo",
+    "name": "ata-messenger",
+    "slug": "ata-messenger",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "myapp",
+    "scheme": "ata_messenger",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
@@ -38,7 +38,9 @@
         {
           "icon": "./assets/notification-icon.png",
           "color": "#ffffff",
-          "sounds": ["./assets/notification-sound.wav"]
+          "sounds": [
+            "./assets/notification-sound.wav"
+          ]
         }
       ]
     ],
@@ -47,7 +49,7 @@
       "color": "#ffffff",
       "iosDisplayInForeground": true,
       "androidMode": "default",
-      "androidCollapsedTitle": "New Message"
+      "androidCollapsedTitle": "Ata Messenger"
     },
     "experiments": {
       "typedRoutes": true

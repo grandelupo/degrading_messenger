@@ -8,7 +8,7 @@ import { supabase } from '../../../utils/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
 import { Message } from '../../../components/Message';
 import { EmojiButton } from '@/components/EmojiButton';
-import { EmojiType, getEmoji } from '@/utils/emojiConfig';
+import { EmojiType, getEmoji, emojiProgressions } from '@/utils/emojiConfig';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { registerForPushNotificationsAsync, savePushToken, sendPushNotification } from '@/utils/notifications';
 
@@ -152,6 +152,50 @@ const calculateDegradation = (message: Message) => {
     ...message,
     content: message.content.substring(charsToRemove),
   };
+};
+
+const EmojiProgressBar = ({ totalMessageCount }: { totalMessageCount: number }) => {
+  const theme = useTheme();
+  const progressAnim = useRef(new Animated.Value(0)).current;
+  
+  // Get the thresholds from emojiProgressions
+  const thresholds = emojiProgressions.heart.map(level => level.requiredMessages);
+  const currentThreshold = thresholds.find(t => totalMessageCount < t) || thresholds[thresholds.length - 1];
+  const previousThreshold = thresholds[thresholds.indexOf(currentThreshold) - 1] || 0;
+  
+  // Calculate progress percentage
+  const progress = ((totalMessageCount - previousThreshold) / (currentThreshold - previousThreshold)) * 100;
+  
+  useEffect(() => {
+    Animated.spring(progressAnim, {
+      toValue: progress,
+      useNativeDriver: false,
+      tension: 20,
+      friction: 7
+    }).start();
+  }, [progress]);
+
+  return (
+    <View style={styles.progressContainer}>
+      <View style={[styles.progressBackground, { backgroundColor: theme.colors.surfaceVariant }]}>
+        <Animated.View 
+          style={[
+            styles.progressFill, 
+            { 
+              width: progressAnim.interpolate({
+                inputRange: [0, 100],
+                outputRange: ['0%', '100%']
+              }),
+              backgroundColor: theme.colors.primary 
+            }
+          ]} 
+        />
+      </View>
+      {/* <Text style={[styles.progressText, { color: theme.colors.onSurfaceVariant }]}>
+        {totalMessageCount} / {currentThreshold} messages until next evolution
+      </Text> */}
+    </View>
+  );
 };
 
 export default function ChatScreen() {
@@ -391,11 +435,17 @@ export default function ChatScreen() {
       // Apply degradation to new message
       const degradedMessage = calculateDegradation(newMessage);
       if (degradedMessage) {
-        setMessages((current) => {
-          if (current.some((msg) => msg.id === newMessage.id)) {
-            return current;
-          }
-          return [degradedMessage, ...current];
+        // Update total message count first to ensure emoji evolution happens before showing the message
+        setTotalMessageCount(count => {
+          const newCount = count + 1;
+          // Force re-render of messages to update emoji display
+          setMessages((current) => {
+            if (current.some((msg) => msg.id === newMessage.id)) {
+              return current;
+            }
+            return [degradedMessage, ...current];
+          });
+          return newCount;
         });
 
         // Send push notification for new message if it's from the other user
@@ -413,8 +463,6 @@ export default function ChatScreen() {
           }
         }
       }
-      // Increment total message count for new messages
-      setTotalMessageCount(count => count + 1);
     } else if (payload.eventType === 'UPDATE') {
       setMessages((current) =>
         current.map((msg) => {
@@ -616,6 +664,7 @@ export default function ChatScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
+      <EmojiProgressBar totalMessageCount={totalMessageCount} />
       <View style={styles.emojiContainer}>
         {(['heart', 'smile', 'angry', 'wink'] as EmojiType[]).map((type) => (
           <EmojiButton
@@ -684,7 +733,8 @@ const styles = StyleSheet.create({
     maxWidth: '80%',
     padding: 12,
     borderRadius: 16,
-    marginBottom: 8,
+    marginBottom: 16,
+    marginRight: 10,
   },
   ownMessage: {
     alignSelf: 'flex-end',
@@ -714,5 +764,24 @@ const styles = StyleSheet.create({
   },
   headerUsername: {
     fontWeight: '600',
+  },
+  progressContainer: {
+    padding: 8,
+    paddingBottom: 0,
+  },
+  progressBackground: {
+    height: 4,
+    borderRadius: 2,
+    overflow: 'hidden',
+    marginBottom: 4,
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 2,
+  },
+  progressText: {
+    fontSize: 12,
+    textAlign: 'center',
+    marginBottom: 4,
   },
 }); 

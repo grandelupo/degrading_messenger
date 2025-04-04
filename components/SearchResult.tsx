@@ -101,6 +101,6 @@ const styles = StyleSheet.create({
     minWidth: 120,
   },
   buttonContent: {
-    height: 32,
+    height: 50,
   },
 }); 

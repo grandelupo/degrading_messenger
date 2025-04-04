@@ -46,10 +46,10 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
     supabaseServiceKey: process.env.EXPO_PUBLIC_SUPABASE_SERVICE_KEY,
     eas: {
-      projectId: 'your-project-id'
+      projectId: '672fbeb8-f05f-4334-ba22-d12118cf9c6a'
     }
   },
   plugins: [
     'expo-secure-store'
-  ]
+  ],
 }); 
