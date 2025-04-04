@@ -44,14 +44,37 @@ export default function ChatScreen() {
     if (!session?.user?.id) return;
 
     try {
-      const { data, error } = await supabase
+      // Get current time
+      const now = new Date();
+      
+      // Calculate cutoff time for degraded messages (24 hours ago)
+      const cutoffTime = new Date(now);
+      cutoffTime.setHours(cutoffTime.getHours() - 24);
+
+      // First, get all messages from the last 24 hours
+      const { data: rawMessages, error } = await supabase
         .from('messages')
         .select('*')
         .or(`and(sender_id.eq.${session.user.id},receiver_id.eq.${receiverId}),and(sender_id.eq.${receiverId},receiver_id.eq.${session.user.id})`)
+        .gte('last_updated', cutoffTime.toISOString())
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setMessages(data || []);
+
+      // Calculate degradation for each message before setting state
+      const processedMessages = (rawMessages || []).map(msg => {
+        const timeSinceLastUpdate = now.getTime() - new Date(msg.last_updated).getTime();
+        const hoursElapsed = timeSinceLastUpdate / (1000 * 60 * 60);
+        
+        // If message is older than 24 hours, don't include it
+        if (hoursElapsed >= 24) {
+          return null;
+        }
+
+        return msg;
+      }).filter((msg): msg is ChatMessage => msg !== null);
+
+      setMessages(processedMessages);
     } catch (error) {
       console.error('Error fetching messages:', error);
     } finally {
@@ -104,6 +127,15 @@ export default function ChatScreen() {
   }, [session?.user?.id, receiverId]);
 
   const handleRealtimeUpdate = (payload: any) => {
+    const now = new Date();
+    const timeSinceLastUpdate = now.getTime() - new Date(payload.new.last_updated).getTime();
+    const hoursElapsed = timeSinceLastUpdate / (1000 * 60 * 60);
+
+    // Don't process messages that have already degraded
+    if (hoursElapsed >= 24) {
+      return;
+    }
+
     if (payload.eventType === 'INSERT') {
       const newMessage: ChatMessage = {
         id: payload.new.id,

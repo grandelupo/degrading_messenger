@@ -18,7 +18,7 @@ const DEGRADATION_INTERVAL = 1000; // Update every second
 
 export function Message({ message, isOwnMessage }: MessageProps) {
   const theme = useTheme();
-  const [visibleContent, setVisibleContent] = useState(message.content);
+  const [visibleContent, setVisibleContent] = useState('');
 
   useEffect(() => {
     const updateDegradation = () => {
