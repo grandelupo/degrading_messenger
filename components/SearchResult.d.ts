@@ -4,5 +4,4 @@ export interface SearchResultProps {
   status: 'none' | 'pending' | 'accepted';
 }
 
-declare const SearchResult: React.FC<SearchResultProps>;
-export default SearchResult; 
+export declare function SearchResult(props: SearchResultProps): JSX.Element; 

@@ -1,10 +1,10 @@
-import { GestureResponderEvent } from 'react-native';
+import { ForwardRefExoticComponent, RefAttributes } from 'react';
+import { View } from 'react-native';
 
 export interface FriendItemProps {
   username: string;
   lastSeen?: string | null;
-  onPress?: (event: GestureResponderEvent) => void;
+  onPress?: () => void;
 }
 
-declare const FriendItem: React.FC<FriendItemProps>;
-export default FriendItem; 
+export declare const FriendItem: ForwardRefExoticComponent<FriendItemProps & RefAttributes<View>>; 
