@@ -68,10 +68,8 @@ const MessageBubble = ({
     styles.message,
     isOwnMessage ? styles.ownMessage : styles.otherMessage,
     { 
-      backgroundColor: isOwnMessage 
-        ? theme.colors.primary 
-        : theme.colors.surfaceVariant,
-      padding: isEmoji ? 8 : 12,
+      backgroundColor: isEmoji ? 'transparent' : (isOwnMessage ? theme.colors.primary : theme.colors.surfaceVariant),
+      padding: isEmoji ? 0 : 12,
       minHeight: isEmoji ? 50 : undefined,
     }
   ];
@@ -82,7 +80,7 @@ const MessageBubble = ({
       color: isOwnMessage 
         ? theme.colors.onPrimary 
         : theme.colors.onSurface,
-      fontSize: isEmoji ? 32 : 16,
+      fontSize: isEmoji ? 48 : 16,
     }
   ];
 
