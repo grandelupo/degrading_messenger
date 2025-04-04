@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, StyleSheet, KeyboardAvoidingView, Platform, Keyboard } from 'react-native';
+import { View, StyleSheet, KeyboardAvoidingView, Platform, Keyboard, Animated } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { TextInput, useTheme, ActivityIndicator, Text } from 'react-native-paper';
 import { FlashList } from '@shopify/flash-list';
@@ -22,13 +22,40 @@ interface Message {
   is_deleted?: boolean;
 }
 
-const MessageBubble = ({ message, isOwnMessage, messageCount }: { 
+const MessageBubble = ({ 
+  message, 
+  isOwnMessage, 
+  messageCount,
+  previewText
+}: { 
   message: Message; 
   isOwnMessage: boolean;
   messageCount: number;
+  previewText?: string;
 }) => {
   const theme = useTheme();
   const isEmoji = message.type === 'emoji';
+  const cursorOpacity = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    const blinkAnimation = Animated.sequence([
+      Animated.timing(cursorOpacity, {
+        toValue: 0,
+        duration: 500,
+        useNativeDriver: true,
+      }),
+      Animated.timing(cursorOpacity, {
+        toValue: 1,
+        duration: 500,
+        useNativeDriver: true,
+      }),
+    ]);
+
+    const animation = Animated.loop(blinkAnimation);
+    animation.start();
+
+    return () => animation.stop();
+  }, []);
 
   const bubbleStyle = [
     styles.message,
@@ -56,6 +83,25 @@ const MessageBubble = ({ message, isOwnMessage, messageCount }: {
     <View style={bubbleStyle}>
       <Text style={textStyle}>
         {isEmoji ? getEmoji(message.content as EmojiType, messageCount) : message.content}
+        {previewText && (
+          <Text style={[textStyle, { color: 'rgba(256, 256, 256, 0.7)' }]}>
+            {' '}{previewText}
+          </Text>
+        )}
+        {previewText && !isEmoji && (
+        <Animated.View 
+          style={[
+            styles.cursor,
+            { 
+              opacity: cursorOpacity,
+              backgroundColor: isOwnMessage 
+                ? 'rgba(255, 255, 255, 0.7)' 
+                : 'rgba(0, 0, 0, 0.7)',
+              marginLeft: 2,
+            }
+          ]} 
+        />
+      )}
       </Text>
     </View>
   );
@@ -67,8 +113,9 @@ export default function ChatScreen() {
   const { session } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
-  const [currentWord, setCurrentWord] = useState('');
-  const [accumulatedWords, setAccumulatedWords] = useState('');
+  const [inputText, setInputText] = useState('');
+  const [lastSentWords, setLastSentWords] = useState('');
+  const [lastMessageTimestamp, setLastMessageTimestamp] = useState<Date | null>(null);
   const inputRef = useRef<any>(null);
   const [messageCount, setMessageCount] = useState(0);
 
@@ -223,89 +270,122 @@ export default function ChatScreen() {
     }
   };
 
+  const isWithinEditPeriod = useCallback(() => {
+    if (!lastMessageTimestamp) return false;
+    return (new Date().getTime() - lastMessageTimestamp.getTime()) < 15000;
+  }, [lastMessageTimestamp]);
+
   const handleInputChange = async (text: string) => {
     if (!session?.user?.id || !receiverId) return;
 
-    if (text.endsWith(' ')) {
-      // Space was added, prepare to send accumulated words
-      const wordsToSend = (accumulatedWords + ' ' + currentWord).trim();
-      if (wordsToSend) {
-        const latestMessage = messages[0];
-        const isLatestFromSelf = latestMessage?.sender_id === session.user.id;
-        const isRecentMessage = latestMessage && 
-          (new Date().getTime() - new Date(latestMessage.updated_at).getTime()) < 15000; // 15 seconds
+    const latestMessage = messages[0];
+    const isLatestFromSelf = latestMessage?.sender_id === session.user.id;
+    const isRecentMessage = latestMessage && 
+      (new Date().getTime() - new Date(latestMessage.updated_at).getTime()) < 15000;
 
-        try {
-          if (isLatestFromSelf && latestMessage.type === 'text' && !latestMessage.is_deleted && isRecentMessage) {
-            // Update existing message
-            const updatedContent = `${latestMessage.content} ${wordsToSend}`;
-            const { data, error } = await supabase
-              .from('messages')
-              .update({ 
-                content: updatedContent,
-                updated_at: new Date().toISOString()
-              })
-              .eq('id', latestMessage.id)
-              .select()
-              .single();
+    // Don't allow deletion of characters if we're within edit period
+    if (text.length < inputText.length && isWithinEditPeriod()) {
+      return;
+    }
 
-            if (error) throw error;
+    // Always update input text immediately for preview
+    setInputText(text);
 
-            // Update local state immediately
-            if (data) {
-              setMessages(current =>
-                current.map(msg =>
-                  msg.id === data.id ? data : msg
-                )
-              );
-            }
-          } else {
-            // Create new message
-            const { data, error } = await supabase
-              .from('messages')
-              .insert([
-                {
-                  sender_id: session.user.id,
-                  receiver_id: receiverId,
-                  content: wordsToSend,
-                  type: 'text',
-                  updated_at: new Date().toISOString()
-                },
-              ])
-              .select()
-              .single();
-
-            if (error) throw error;
-
-            // Update local state immediately
-            if (data) {
-              setMessages(current => [data, ...current]);
-            }
-          }
-        } catch (error) {
-          console.error('Error handling message:', error);
-        }
-        // Reset both current word and accumulated words
-        setCurrentWord('');
-        setAccumulatedWords('');
+    // Check if the last character is a punctuation mark
+    const lastChar = text[text.length - 1];
+    const isPunctuation = [',', '.', '?'].includes(lastChar);
+    
+    // If it's punctuation or space, send/update the message
+    if (text.endsWith(' ') || isPunctuation) {
+      // If it's punctuation, automatically add a space
+      if (isPunctuation) {
+        text = text + ' ';
+        setInputText(text);
       }
-    } else {
-      // No space, update current word and accumulated words
-      if (text.length < currentWord.length) {
-        // Backspace was pressed
-        setCurrentWord(text);
-      } else {
-        // New character was added
-        if (currentWord.includes(' ')) {
-          // Previous word is complete, add it to accumulated words
-          setAccumulatedWords((prev) => (prev ? prev + ' ' + currentWord.trim() : currentWord.trim()));
-          setCurrentWord(text.slice(text.lastIndexOf(' ') + 1));
+
+      // Get only the new words by removing the previously sent words
+      const allWords = text.trim();
+      const newWords = allWords.slice(lastSentWords.length).trim();
+
+      if (!newWords) return;
+
+      try {
+        if (isLatestFromSelf && latestMessage.type === 'text' && !latestMessage.is_deleted && isRecentMessage) {
+          // Update existing message by appending only the new words
+          const updatedContent = `${latestMessage.content} ${newWords}`;
+          const { data, error } = await supabase
+            .from('messages')
+            .update({ 
+              content: updatedContent,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', latestMessage.id)
+            .select()
+            .single();
+
+          if (error) throw error;
+
+          // Update local state immediately
+          if (data) {
+            setMessages(current =>
+              current.map(msg =>
+                msg.id === data.id ? data : msg
+              )
+            );
+            setLastMessageTimestamp(new Date());
+            setLastSentWords(allWords);
+          }
         } else {
-          setCurrentWord(text);
+          // Create new message
+          const { data, error } = await supabase
+            .from('messages')
+            .insert([
+              {
+                sender_id: session.user.id,
+                receiver_id: receiverId,
+                content: newWords,
+                type: 'text',
+                updated_at: new Date().toISOString()
+              },
+            ])
+            .select()
+            .single();
+
+          if (error) throw error;
+
+          // Update local state immediately
+          if (data) {
+            setMessages(current => [data, ...current]);
+            setLastMessageTimestamp(new Date());
+            setLastSentWords(newWords);
+          }
         }
+
+        // Only clear input and last sent words if we're not within the edit period
+        if (!isWithinEditPeriod()) {
+          setInputText('');
+          setLastSentWords('');
+        }
+      } catch (error) {
+        console.error('Error handling message:', error);
       }
     }
   };
+
+  // Update the effect to also reset lastSentWords
+  useEffect(() => {
+    if (!lastMessageTimestamp) return;
+
+    const timeoutId = setTimeout(() => {
+      if (!isWithinEditPeriod()) {
+        setInputText('');
+        setLastSentWords('');
+        setLastMessageTimestamp(null);
+      }
+    }, 15000);
+
+    return () => clearTimeout(timeoutId);
+  }, [lastMessageTimestamp, isWithinEditPeriod]);
 
   const handleEmojiPress = async (type: EmojiType) => {
     if (!session?.user?.id || !receiverId) return;
@@ -334,13 +414,27 @@ export default function ChatScreen() {
     }
   };
 
-  const renderMessage = ({ item }: { item: Message }) => {
+  const renderMessage = ({ item, index }: { item: Message; index: number }) => {
     const isOwnMessage = item.sender_id === session?.user?.id;
+    const isLatestMessage = index === 0;
+    const showPreview = isLatestMessage && 
+                       isOwnMessage && 
+                       item.type === 'text' && 
+                       inputText.length > lastSentWords.length;
+
+
+
+    // Get the preview text (only the new input after the last sent words)
+    const previewText = showPreview 
+      ? inputText.slice(lastSentWords.length).trim()
+      : undefined;
+
     return (
       <MessageBubble 
         message={item} 
         isOwnMessage={isOwnMessage} 
         messageCount={messageCount}
+        previewText={previewText}
       />
     );
   };
@@ -373,6 +467,7 @@ export default function ChatScreen() {
       
       <FlashList
         data={messages}
+        extraData={inputText}
         renderItem={renderMessage}
         estimatedItemSize={50}
         contentContainerStyle={styles.messageList}
@@ -384,7 +479,7 @@ export default function ChatScreen() {
           ref={inputRef}
           mode="outlined"
           placeholder="Type a message..."
-          value={currentWord}
+          value={inputText}
           onChangeText={handleInputChange}
           style={styles.input}
           autoFocus
@@ -438,5 +533,12 @@ const styles = StyleSheet.create({
   },
   messageText: {
     textAlign: 'center',
+  },
+  cursor: {
+    width: 2,
+    height: 16,
+    marginLeft: 4,
+    marginTop: -16,
+    alignSelf: 'flex-start',
   },
 }); 
