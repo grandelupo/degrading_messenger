@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, StyleSheet, KeyboardAvoidingView, Platform, Keyboard, Animated, Image } from 'react-native';
-import { useLocalSearchParams, useNavigation } from 'expo-router';
+import { useLocalSearchParams, useNavigation, router } from 'expo-router';
 import { TextInput, useTheme, ActivityIndicator, Text, Avatar } from 'react-native-paper';
 import { FlashList } from '@shopify/flash-list';
 import * as Notifications from 'expo-notifications';
@@ -198,6 +198,15 @@ const EmojiProgressBar = ({ totalMessageCount }: { totalMessageCount: number }) 
   );
 };
 
+// Set up notification handler
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+  }),
+});
+
 export default function ChatScreen() {
   const { id: receiverId } = useLocalSearchParams();
   const theme = useTheme();
@@ -213,6 +222,8 @@ export default function ChatScreen() {
   const [totalMessageCount, setTotalMessageCount] = useState(0);
   const [initialDataLoaded, setInitialDataLoaded] = useState(false);
   const [receiverPushToken, setReceiverPushToken] = useState<string | null>(null);
+  const notificationListener = useRef<any>();
+  const responseListener = useRef<any>();
 
   // Fetch receiver's profile
   useEffect(() => {
@@ -405,20 +416,61 @@ export default function ChatScreen() {
           .from('push_tokens')
           .select('token')
           .eq('user_id', receiverId)
-          .single();
+          .maybeSingle(); // Use maybeSingle instead of single to handle no results
 
-        if (error) throw error;
-        if (data) {
-          setReceiverPushToken(data.token);
+        if (error) {
+          console.error('Error fetching receiver push token:', error);
+          return;
         }
+        
+        // data will be null if no token exists
+        setReceiverPushToken(data?.token || null);
       } catch (error) {
-        console.error('Error fetching receiver push token:', error);
+        console.error('Error in push token fetch:', error);
       }
     };
 
     fetchReceiverPushToken();
   }, [receiverId]);
 
+  // Set up notification listeners
+  useEffect(() => {
+    // Handle notifications when app is in foreground
+    notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
+      const data = notification.request.content.data;
+      // Only show notification if we're not in the chat with the sender
+      if (data.senderId && data.senderId !== receiverId) {
+        Notifications.scheduleNotificationAsync({
+          content: {
+            title: notification.request.content.title || "New Message",
+            body: notification.request.content.body,
+            data: notification.request.content.data,
+          },
+          trigger: null, // Show immediately
+        });
+      }
+    });
+
+    // Handle notification response (when user taps notification)
+    responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
+      const data = response.notification.request.content.data;
+      if (data.senderId) {
+        // Navigate to the chat with the sender
+        router.push(`/chat/${data.senderId}`);
+      }
+    });
+
+    return () => {
+      if (notificationListener.current) {
+        Notifications.removeNotificationSubscription(notificationListener.current);
+      }
+      if (responseListener.current) {
+        Notifications.removeNotificationSubscription(responseListener.current);
+      }
+    };
+  }, [receiverId]);
+
+  // Modify handleRealtimeUpdate to include sender info in notifications
   const handleRealtimeUpdate = async (payload: any) => {
     if (payload.eventType === 'INSERT') {
       const newMessage: Message = {
@@ -456,7 +508,12 @@ export default function ChatScreen() {
               `New message from ${receiverProfile.username}`,
               newMessage.type === 'emoji' 
                 ? '📱 Sent an emoji'
-                : newMessage.content.slice(0, 50) + (newMessage.content.length > 50 ? '...' : '')
+                : newMessage.content.slice(0, 50) + (newMessage.content.length > 50 ? '...' : ''),
+              {
+                senderId: newMessage.sender_id,
+                type: newMessage.type,
+                messageId: newMessage.id
+              }
             );
           } catch (error) {
             console.error('Error sending push notification:', error);

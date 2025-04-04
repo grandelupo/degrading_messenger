@@ -58,13 +58,18 @@ export async function savePushToken(userId: string, token: string) {
   }
 }
 
-export async function sendPushNotification(expoPushToken: string, title: string, body: string) {
+export async function sendPushNotification(
+  expoPushToken: string, 
+  title: string, 
+  body: string,
+  data?: Record<string, any>
+) {
   const message = {
     to: expoPushToken,
     sound: 'default',
     title: title,
     body: body,
-    data: { someData: 'goes here' },
+    data: data || {},
   };
 
   await fetch('https://exp.host/--/api/v2/push/send', {
