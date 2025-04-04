@@ -112,6 +112,46 @@ const MessageBubble = ({
   );
 };
 
+const calculateDegradation = (message: Message) => {
+  const now = new Date();
+  const lastUpdate = new Date(message.updated_at);
+  const secondsSinceUpdate = (now.getTime() - lastUpdate.getTime()) / 1000;
+
+  // For emoji messages - disappear completely after 20 minutes
+  if (message.type === 'emoji') {
+    const emojiLifespan = 20 * 60; // 20 minutes in seconds
+    if (secondsSinceUpdate >= emojiLifespan) {
+      return null;
+    }
+    return message;
+  }
+
+  // For text messages - start degrading after 10 minutes
+  const degradationStart = 10 * 60; // 10 minutes in seconds
+  if (secondsSinceUpdate < degradationStart) {
+    return message;
+  }
+
+  const degradationPeriod = 10 * 60; // 10 minutes degradation period in seconds
+  const timeIntoDegradation = secondsSinceUpdate - degradationStart;
+  
+  // Calculate characters per second to remove for consistent speed
+  const originalLength = message.content.length;
+  const charsPerSecond = originalLength / degradationPeriod;
+  const charsToRemove = Math.floor(timeIntoDegradation * charsPerSecond);
+
+  // If all characters should be removed, return null
+  if (charsToRemove >= originalLength) {
+    return null;
+  }
+
+  // Return message with degraded content, removing characters from the beginning
+  return {
+    ...message,
+    content: message.content.substring(charsToRemove),
+  };
+};
+
 export default function ChatScreen() {
   const { id: receiverId } = useLocalSearchParams();
   const theme = useTheme();
@@ -124,7 +164,8 @@ export default function ChatScreen() {
   const [lastMessageTimestamp, setLastMessageTimestamp] = useState<Date | null>(null);
   const [receiverProfile, setReceiverProfile] = useState<UserProfile | null>(null);
   const inputRef = useRef<any>(null);
-  const [messageCount, setMessageCount] = useState(0);
+  const [totalMessageCount, setTotalMessageCount] = useState(0);
+  const [initialDataLoaded, setInitialDataLoaded] = useState(false);
 
   // Fetch receiver's profile
   useEffect(() => {
@@ -185,18 +226,35 @@ export default function ChatScreen() {
     };
   }, []);
 
-  const fetchMessages = useCallback(async () => {
-    if (!session?.user?.id) return;
+  // Fetch total message count
+  const fetchTotalMessageCount = useCallback(async () => {
+    if (!session?.user?.id || !receiverId) return;
 
     try {
-      // Get current time
-      const now = new Date();
-      
-      // Calculate cutoff time for degraded messages (24 hours ago)
-      const cutoffTime = new Date(now);
-      cutoffTime.setHours(cutoffTime.getHours() - 24);
+      const { count, error } = await supabase
+        .from('messages')
+        .select('*', { count: 'exact', head: true })
+        .or(`and(sender_id.eq.${session.user.id},receiver_id.eq.${receiverId}),and(sender_id.eq.${receiverId},receiver_id.eq.${session.user.id})`);
 
-      // First, get all messages from the last 24 hours
+      if (error) throw error;
+      if (count !== null) {
+        setTotalMessageCount(count);
+        return true;
+      }
+    } catch (error) {
+      console.error('Error fetching message count:', error);
+    }
+    return false;
+  }, [session?.user?.id, receiverId]);
+
+  // Update fetchMessages to return success status
+  const fetchMessages = useCallback(async () => {
+    if (!session?.user?.id) return false;
+
+    try {
+      const cutoffTime = new Date();
+      cutoffTime.setMinutes(cutoffTime.getMinutes() - 20);
+
       const { data: rawMessages, error } = await supabase
         .from('messages')
         .select('*')
@@ -206,34 +264,43 @@ export default function ChatScreen() {
 
       if (error) throw error;
 
-      // Calculate degradation for each message before setting state
-      const processedMessages = (rawMessages || []).map(msg => {
-        const timeSinceLastUpdate = now.getTime() - new Date(msg.updated_at).getTime();
-        const hoursElapsed = timeSinceLastUpdate / (1000 * 60 * 60);
-        
-        // If message is older than 24 hours, don't include it
-        if (hoursElapsed >= 24) {
-          return null;
-        }
-
-        return msg;
-      }).filter((msg): msg is Message => msg !== null);
+      // Process messages and apply initial degradation
+      const processedMessages = (rawMessages || [])
+        .map(msg => {
+          const degraded = calculateDegradation(msg);
+          if (!degraded) return null;
+          return degraded;
+        })
+        .filter((msg): msg is Message => msg !== null);
 
       setMessages(processedMessages);
-      setMessageCount(processedMessages.length);
+      return true;
     } catch (error) {
       console.error('Error fetching messages:', error);
-    } finally {
-      setLoading(false);
     }
+    return false;
   }, [session?.user?.id, receiverId]);
 
+  // Initial fetch of messages and count
   useEffect(() => {
-    fetchMessages();
+    const loadInitialData = async () => {
+      setLoading(true);
+      try {
+        const [messagesSuccess, countSuccess] = await Promise.all([
+          fetchMessages(),
+          fetchTotalMessageCount()
+        ]);
+        
+        if (messagesSuccess && countSuccess) {
+          setInitialDataLoaded(true);
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
 
-    console.log('Setting up real-time subscription...');
+    loadInitialData();
 
-    // Set up real-time subscription for all messages in this conversation
     const channel = supabase
       .channel('messages')
       .on(
@@ -245,7 +312,6 @@ export default function ChatScreen() {
           filter: `sender_id=eq.${session?.user?.id},receiver_id=eq.${receiverId}`
         },
         (payload) => {
-          console.log('Received outgoing message update:', payload);
           handleRealtimeUpdate(payload);
         }
       )
@@ -258,30 +324,17 @@ export default function ChatScreen() {
           filter: `sender_id=eq.${receiverId},receiver_id=eq.${session?.user?.id}`
         },
         (payload) => {
-          console.log('Received incoming message update:', payload);
           handleRealtimeUpdate(payload);
         }
       )
-      .subscribe((status) => {
-        console.log('Subscription status:', status);
-      });
+      .subscribe();
 
     return () => {
-      console.log('Unsubscribing from chat messages');
       channel.unsubscribe();
     };
   }, [session?.user?.id, receiverId]);
 
   const handleRealtimeUpdate = (payload: any) => {
-    const now = new Date();
-    const timeSinceLastUpdate = now.getTime() - new Date(payload.new.updated_at).getTime();
-    const hoursElapsed = timeSinceLastUpdate / (1000 * 60 * 60);
-
-    // Don't process messages that have already degraded
-    if (hoursElapsed >= 24) {
-      return;
-    }
-
     if (payload.eventType === 'INSERT') {
       const newMessage: Message = {
         id: payload.new.id,
@@ -294,31 +347,34 @@ export default function ChatScreen() {
         is_deleted: payload.new.is_deleted,
       };
 
-      setMessages((current) => {
-        // Check if message already exists
-        if (current.some((msg) => msg.id === newMessage.id)) {
-          return current;
-        }
-        // Add new message at the beginning (since list is inverted)
-        return [newMessage, ...current];
-      });
-      setMessageCount(count => count + 1);
+      // Apply degradation to new message
+      const degradedMessage = calculateDegradation(newMessage);
+      if (degradedMessage) {
+        setMessages((current) => {
+          if (current.some((msg) => msg.id === newMessage.id)) {
+            return current;
+          }
+          return [degradedMessage, ...current];
+        });
+      }
+      // Increment total message count for new messages
+      setTotalMessageCount(count => count + 1);
     } else if (payload.eventType === 'UPDATE') {
       setMessages((current) =>
-        current.map((msg) =>
-          msg.id === payload.new.id
-            ? {
-                id: payload.new.id,
-                content: payload.new.content,
-                type: payload.new.type,
-                sender_id: payload.new.sender_id,
-                receiver_id: payload.new.receiver_id,
-                created_at: payload.new.created_at,
-                updated_at: payload.new.updated_at,
-                is_deleted: payload.new.is_deleted,
-              }
-            : msg
-        )
+        current.map((msg) => {
+          if (msg.id !== payload.new.id) return msg;
+          const updatedMessage = {
+            id: payload.new.id,
+            content: payload.new.content,
+            type: payload.new.type,
+            sender_id: payload.new.sender_id,
+            receiver_id: payload.new.receiver_id,
+            created_at: payload.new.created_at,
+            updated_at: payload.new.updated_at,
+            is_deleted: payload.new.is_deleted,
+          };
+          return calculateDegradation(updatedMessage) || msg;
+        }).filter((msg): msg is Message => msg !== null)
       );
     }
   };
@@ -440,6 +496,30 @@ export default function ChatScreen() {
     return () => clearTimeout(timeoutId);
   }, [lastMessageTimestamp, isWithinEditPeriod]);
 
+  // Update renderMessage to use totalMessageCount instead of messages.length
+  const renderMessage = ({ item, index }: { item: Message; index: number }) => {
+    const isOwnMessage = item.sender_id === session?.user?.id;
+    const isLatestMessage = index === 0;
+    const showPreview = isLatestMessage && 
+                       isOwnMessage && 
+                       item.type === 'text' && 
+                       inputText.length > lastSentWords.length;
+
+    const previewText = showPreview 
+      ? inputText.slice(lastSentWords.length).trim()
+      : undefined;
+
+    return (
+      <MessageBubble 
+        message={item} 
+        isOwnMessage={isOwnMessage} 
+        messageCount={totalMessageCount}
+        previewText={previewText}
+      />
+    );
+  };
+
+  // Update handleEmojiPress to not manage message count (it's handled by handleRealtimeUpdate)
   const handleEmojiPress = async (type: EmojiType) => {
     if (!session?.user?.id || !receiverId) return;
 
@@ -460,41 +540,15 @@ export default function ChatScreen() {
       if (error) throw error;
       if (data?.[0]) {
         setMessages(current => [data[0], ...current]);
-        setMessageCount(count => count + 1);
       }
     } catch (error) {
       console.error('Error sending emoji:', error);
     }
   };
 
-  const renderMessage = ({ item, index }: { item: Message; index: number }) => {
-    const isOwnMessage = item.sender_id === session?.user?.id;
-    const isLatestMessage = index === 0;
-    const showPreview = isLatestMessage && 
-                       isOwnMessage && 
-                       item.type === 'text' && 
-                       inputText.length > lastSentWords.length;
-
-
-
-    // Get the preview text (only the new input after the last sent words)
-    const previewText = showPreview 
-      ? inputText.slice(lastSentWords.length).trim()
-      : undefined;
-
+  if (loading || !initialDataLoaded) {
     return (
-      <MessageBubble 
-        message={item} 
-        isOwnMessage={isOwnMessage} 
-        messageCount={messageCount}
-        previewText={previewText}
-      />
-    );
-  };
-
-  if (loading) {
-    return (
-      <View style={styles.centered}>
+      <View style={[styles.centered, { backgroundColor: theme.colors.background }]}>
         <ActivityIndicator size="large" />
       </View>
     );
@@ -511,7 +565,7 @@ export default function ChatScreen() {
           <EmojiButton
             key={type}
             type={type}
-            messageCount={messageCount}
+            messageCount={totalMessageCount}
             onPress={() => handleEmojiPress(type)}
             size={32}
           />
